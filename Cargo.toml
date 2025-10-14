@@ -2,6 +2,9 @@
 name = "nise"
 version = "0.1.0"
 edition = "2024"
+authors = ["Revertron"]
+description = "NISE - Nitrokey Simple Encryption. Encrypt files by Nitrokey PIV with ease!"
+keywords = ["nitrokey", "piv", "encryption", "signing", "security"]
 
 [dependencies]
 anyhow = "1.0.100"
