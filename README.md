@@ -53,6 +53,8 @@ cargo install --path .
 
 Make sure your Nitrokey supports **PIV (Personal Identity Verification)**, Nitrokey 3 has this functionality.
 
+### Initialize keys in a slot
+
 Initialize keys in any slot of PIV applet (85..95 in HEX):
 
 ```bash
@@ -63,18 +65,22 @@ It will generate an **ECDH key pair** and certificate (signed by new private key
 
 Then you can send that key-string to any of your friends or colegues, or even publish on your website.
 
+### Encrypt a file for someone
+
 Anyone, who wants to send you a confidential file can do this:
 
 ```bash
-nise -e -f some-secret-file.txt -o file-to-send.nse
+nise -e -k <long key string starting from nise1> -f some-secret-file.txt -o file-to-send.nse
 ```
 
-And you will recover the readable version of the file like that:
+### Decrypt that file
+
+On the other side recipient will recover the readable version of the file like that:
 ```bash
 nise -d -f file-to-send.nse -o decrypted-secrets.txt
 ```
 
-The decryption process will ask you to enter your PIN (from Nitrokey).
+The decryption process will ask the user to enter your PIN (from Nitrokey).
 
 ---
 
