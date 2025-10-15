@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write  # ← allows creating releases and uploading assets
+
 jobs:
   release:
     name: Create GitHub Release
