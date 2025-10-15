@@ -11,7 +11,7 @@ anyhow = "1.0.100"
 chacha20poly1305 = "0.10"
 getopts = "0.2.24"
 hex = "0.4.3"
-nitrokey-piv = { git = "https://github.com/Revertron/nitrokey-piv", tag="1.0.0" }
+nitrokey-piv = { git = "https://github.com/Revertron/nitrokey-piv", tag="1.1.0" }
 p256 = { version = "0.13.2", features = ["ecdh", "arithmetic"] }
 p384 = { version = "0.13.1", features = ["ecdh", "arithmetic"] }
 rand = "0.8.5"

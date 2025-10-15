@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context, Error};
 use nitrokey_piv::{from_hex, parse_certificate_subject, to_hex, wrap_key, CertificateSubject, EccCurve, Nitrokey3PIV, PivSlot, PublicKey, DEFAULT_ADMIN_KEY};
 use std::convert::TryFrom;
-use std::{env, io, process};
 use std::str::FromStr;
+use std::{env, io, process};
 
 use rand::rngs::OsRng;
 use rand::RngCore;
@@ -12,13 +12,13 @@ use p256::{PublicKey as P256PublicKey, SecretKey as P256SecretKey};
 use p384::ecdh::SharedSecret as P384SharedSecret;
 use p384::{PublicKey as P384PublicKey, SecretKey as P384SecretKey};
 
+use chacha20poly1305::aead::Aead;
+use chacha20poly1305::{Key as XKey, KeyInit, XChaCha20Poly1305, XNonce};
+use getopts::Options;
 use p256::elliptic_curve::sec1::ToEncodedPoint;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;
-use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce, Key as XKey};
-use chacha20poly1305::aead::Aead;
-use getopts::Options;
 
 // Encryption chunk size (1 MiB)
 const CHUNK_SIZE: usize = 1024 * 1024;
@@ -181,11 +181,20 @@ fn main() {
         };
 
         let subj = match matches.opt_str("c") {
-            None => CertificateSubject {
-                common_name: "NISE1".to_string(),
-                organization: None,
-                organizational_unit: None,
-                country: None,
+            None => {
+                println!("\nNo certificate info given. Please enter certificate fields manually.");
+
+                let common_name = prompt("Common Name (CN)", Some("NISE1"));
+                let organization = prompt_optional("Organization (O)");
+                let organizational_unit = prompt_optional("Organizational Unit (OU)");
+                let country = prompt_optional("Country (C)");
+
+                CertificateSubject {
+                    common_name,
+                    organization,
+                    organizational_unit,
+                    country,
+                }
             },
             Some(s) => {
                 match parse_certificate_subject(&s) {
@@ -228,9 +237,14 @@ fn main() {
             pin = change_pin(&nk, &pin);
         }
 
+        if let Err(_) = nk.verify_pin(&pin) {
+            eprintln!("Failed to verify user PIN!");
+            process::exit(1);
+        }
+
         print!("Generating keys and certificate... ");
         io::stdout().flush().unwrap();
-        match nk.generate_key_and_cert(slot, &subj, EccCurve::P256, 365 * 100, &pin) {
+        match nk.generate_key_and_cert(slot, &subj, EccCurve::P256, 365 * 100) {
             Err(e) => {
                 println!();
                 eprintln!("Error: {}", e);
@@ -506,16 +520,48 @@ fn set_password_as_admin_key(nk: &Nitrokey3PIV) -> Result<Vec<u8>, bool> {
                 return Err(false);
             }
             break key.to_vec();
+        } else {
+            return Err(false);
         };
     })
 }
 
+fn prompt(label: &str, default: Option<&str>) -> String {
+    let mut input = String::new();
+    if let Some(def) = default {
+        print!("  {} [{}]: ", label, def);
+    } else {
+        print!("  {}: ", label);
+    }
+    io::stdout().flush().unwrap();
+    io::stdin().read_line(&mut input).unwrap();
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        default.unwrap_or("").to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn prompt_optional(label: &str) -> Option<String> {
+    let mut input = String::new();
+    print!("  {} (optional): ", label);
+    io::stdout().flush().unwrap();
+    io::stdin().read_line(&mut input).unwrap();
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use crate::{decrypt_file_with_device, encrypt_file, NiseKey};
     use anyhow::Context;
     use nitrokey_piv::{to_hex, Nitrokey3PIV, PivSlot};
-    use crate::{decrypt_file_with_device, encrypt_file, NiseKey};
+    use std::str::FromStr;
 
     pub fn encrypt() {
         println!("Encrypting...");
@@ -762,8 +808,8 @@ pub fn encrypt_file<P1, P2>(from: P1, to: P2, ids: &[NiseKey]) -> Result<(), any
 
     // === XChaCha20-Poly1305 encrypt the file contents with file_key ===
     use chacha20poly1305::{
-        XChaCha20Poly1305, Key as XKey, XNonce,
-        aead::{Aead, KeyInit}
+        aead::{Aead, KeyInit}, Key as XKey, XChaCha20Poly1305,
+        XNonce
     };
 
     let infile = File::open(from.as_ref()).context("open input")?;

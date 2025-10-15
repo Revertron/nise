@@ -456,8 +456,8 @@ dependencies = [
 
 [[package]]
 name = "nitrokey-piv"
-version = "1.0.0"
-source = "git+https://github.com/Revertron/nitrokey-piv?tag=1.0.0#12f52ceec7de50dca08b31b86c30cb6c0386c065"
+version = "1.1.0"
+source = "git+https://github.com/Revertron/nitrokey-piv?tag=1.1.0#c9e49f1bb25a01d1273faafb5a35954f697a5f0c"
 dependencies = [
  "aes",
  "anyhow",
