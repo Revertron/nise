@@ -53,6 +53,27 @@ cargo install --path .
 
 Make sure your Nitrokey supports **PIV (Personal Identity Verification)**, Nitrokey 3 has this functionality.
 
+> **⚠️ IMPORTANT: Security Setup Required**
+> Before using NISE, you **must** change the default PIN, PUK, and admin key on your Nitrokey.
+> Using default credentials is a **critical security risk**.
+>
+> **📖 Read the [Complete Setup Guide (SETUP.md)](./SETUP.md)** for detailed instructions and security best practices.
+
+### Quick Security Setup
+
+**Change default credentials immediately:**
+
+```bash
+# 1. Change admin key (MOST IMPORTANT - DO THIS FIRST!)
+nise --set-admin-key
+
+# 2. Change PIN (used for decryption)
+nise --set-pin
+
+# 3. Change PUK (emergency unlock key)
+nise --set-puk
+```
+
 ### Initialize keys in a slot
 
 Initialize keys in any slot of PIV applet (85..95 in HEX):
