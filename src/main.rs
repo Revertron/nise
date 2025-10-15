@@ -63,28 +63,22 @@ fn main() {
             eprintln!("Cannot combine with other tools.");
             process::exit(1);
         }
-        let pin = match rpassword::prompt_password("Enter current user PIN (123456): ") {
-            Ok(p) => {
-                if p.is_empty() {
-                    println!("Using default PIN: 123456");
-                    String::from("123456")
-                } else {
-                    p
-                }
-            }
-            Err(e) => {
+
+        let pin = prompt_current_credential("Enter current user PIN (default: 123456): ", "123456")
+            .unwrap_or_else(|e| {
                 eprintln!("Error: {}", e);
                 process::exit(1);
-            }
-        };
-        let nk = match Nitrokey3PIV::open(None) {
-            Ok(nk) => nk,
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                process::exit(1);
-            }
-        };
-        let _ = change_pin(&nk, &pin);
+            });
+
+        let nk = Nitrokey3PIV::open(None).unwrap_or_else(|e| {
+            eprintln!("Error: {}", e);
+            process::exit(1);
+        });
+
+        if let Err(e) = change_pin(&nk, &pin) {
+            eprintln!("Error: {}", e);
+            process::exit(1);
+        }
         return;
     }
 
@@ -93,28 +87,22 @@ fn main() {
             eprintln!("Cannot combine with other tools.");
             process::exit(1);
         }
-        let old_puk = match rpassword::prompt_password("Enter current PUK (12345678): ") {
-            Ok(p) => {
-                if p.is_empty() {
-                    println!("Using default PUK: 12345678");
-                    String::from("12345678")
-                } else {
-                    p
-                }
-            }
-            Err(e) => {
+
+        let old_puk = prompt_current_credential("Enter current PUK (default: 12345678): ", "12345678")
+            .unwrap_or_else(|e| {
                 eprintln!("Error: {}", e);
                 process::exit(1);
-            }
-        };
-        let nk = match Nitrokey3PIV::open(None) {
-            Ok(nk) => nk,
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                process::exit(1);
-            }
-        };
-        let _ = change_puk(&nk, &old_puk);
+            });
+
+        let nk = Nitrokey3PIV::open(None).unwrap_or_else(|e| {
+            eprintln!("Error: {}", e);
+            process::exit(1);
+        });
+
+        if let Err(e) = change_puk(&nk, &old_puk) {
+            eprintln!("Error: {}", e);
+            process::exit(1);
+        }
         return;
     }
 
@@ -124,17 +112,17 @@ fn main() {
             process::exit(1);
         }
 
-        println!("Let's change admin key to something secure and usable.");
-        let nk = match Nitrokey3PIV::open(None) {
-            Ok(nk) => nk,
+        let nk = Nitrokey3PIV::open(None).unwrap_or_else(|e| {
+            eprintln!("Error: {}", e);
+            process::exit(1);
+        });
+
+        match set_password_as_admin_key(&nk) {
+            Ok(_) => println!("Admin key changed successfully!"),
             Err(e) => {
                 eprintln!("Error: {}", e);
                 process::exit(1);
             }
-        };
-        match set_password_as_admin_key(&nk) {
-            Ok(_) => println!("Admin key changed successfully!"),
-            Err(_) => println!("Admin key changed failed!"),
         };
         return;
     }
@@ -210,31 +198,24 @@ fn main() {
         println!();
 
         println!("For key-pair generation we need to authenticate with Admin Key");
-        if auth_admin(&nk) {
-            println!("Admin authentication succeeded\n");
-        } else {
-            eprintln!("Admin authentication failed");
+        if let Err(e) = auth_admin(&nk) {
+            eprintln!("Admin authentication failed: {}", e);
             process::exit(1);
         }
+        println!("Admin authentication succeeded\n");
 
-        let mut pin = match rpassword::prompt_password("Enter user PIN for certificate signing (123456): ") {
-            Ok(p) => {
-                if p.is_empty() {
-                    String::from("123456")
-                } else {
-                    p
-                }
-            }
-            Err(e) => {
+        let mut pin = prompt_current_credential("Enter user PIN for certificate signing (default: 123456): ", "123456")
+            .unwrap_or_else(|e| {
                 eprintln!("Error: {}", e);
                 process::exit(1);
-            }
-        };
+            });
 
         if pin == "123456" {
             println!("\nWarning! You are using default PIN, it is not secure!");
-            println!("Let's change default PIN to something more secure.");
-            pin = change_pin(&nk, &pin);
+            pin = change_pin(&nk, &pin).unwrap_or_else(|e| {
+                eprintln!("Error: {}", e);
+                process::exit(1);
+            });
         }
 
         if let Err(_) = nk.verify_pin(&pin) {
@@ -360,173 +341,194 @@ fn main() {
 
 }
 
-fn change_pin(nk: &Nitrokey3PIV, old_pin: &str) -> String {
+// ============================================================================
+// Credential Management Helper Functions
+// ============================================================================
+
+/// Prompts user for yes/no confirmation
+fn confirm(prompt: &str) -> anyhow::Result<bool> {
+    print!("{} [y/N]: ", prompt);
+    io::stdout().flush()?;
+
+    let mut response = String::new();
+    io::stdin().read_line(&mut response)?;
+
+    let answer = response.trim().to_lowercase();
+    Ok(answer == "y" || answer == "yes")
+}
+
+/// Prompts for a secret value with confirmation and validation
+fn prompt_secret_with_confirmation(
+    prompt: &str,
+    confirm_prompt: &str,
+    validator: impl Fn(&str) -> Result<(), String>,
+) -> anyhow::Result<String> {
     loop {
-        let pin1 = match rpassword::prompt_password("Enter new user PIN (6-8 digits, empty line to cancel): ") {
-            Ok(p) => {
-                if p.is_empty() {
-                    return old_pin.to_owned();
-                }
-                if p.len() < 6 || p.len() > 8 {
-                    println!("PIN should be from 6 to 8 digits, try again.");
-                    continue;
-                } else {
-                    p
-                }
-            }
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                process::exit(1);
-            }
-        };
-        match rpassword::prompt_password("Enter new PIN again: ") {
-            Ok(p2) => {
-                if p2 != pin1 {
-                    println!("Second PIN is not equal to first one, let's try again.");
-                    continue;
-                }
-            }
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                process::exit(1);
-            }
+        let secret = rpassword::prompt_password(prompt)
+            .context("Failed to read password")?;
+
+        // Validate the input
+        if let Err(msg) = validator(&secret) {
+            eprintln!("{}", msg);
+            continue;
         }
-        // The user changed the PIN, load it to device
-        if let Err(e) = nk.change_pin(&old_pin, &pin1) {
-            eprintln!("Error: {}", e);
-            process::exit(1);
+
+        // Confirm the secret
+        let confirmation = rpassword::prompt_password(confirm_prompt)
+            .context("Failed to read confirmation")?;
+
+        if secret != confirmation {
+            eprintln!("Entries do not match. Please try again.");
+            continue;
         }
-        println!("PIN changed successfully, will use it in process.");
-        break pin1;
+
+        return Ok(secret);
     }
 }
 
-fn change_puk(nk: &Nitrokey3PIV, old_puk: &str) {
-    loop {
-        let puk1 = match rpassword::prompt_password("Enter new PUK (6-8 digits/chars/symbols, empty line to cancel): ") {
-            Ok(p) => {
-                if p.len() < 6 || p.len() > 8 {
-                    println!("PUK should be from 6 to 8 chars, try again.");
-                    continue;
-                } else {
-                    p
-                }
-            }
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                process::exit(1);
-            }
-        };
-        match rpassword::prompt_password("Enter new PUK again: ") {
-            Ok(p2) => {
-                if p2 != puk1 {
-                    println!("Second PUK is not equal to first one, let's try again.");
-                    continue;
-                }
-            }
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                process::exit(1);
-            }
-        }
-        // The user changed the PIN, load it to device
-        if let Err(e) = nk.change_puk(&old_puk, &puk1) {
-            eprintln!("Error: {}", e);
-            process::exit(1);
-        }
-        println!("PUK changed successfully!");
-        break;
+/// Prompts for current credential with default fallback
+fn prompt_current_credential(prompt: &str, default: &str) -> anyhow::Result<String> {
+    let value = rpassword::prompt_password(prompt)
+        .context("Failed to read password")?;
+
+    if value.is_empty() {
+        println!("Using default: {}", default);
+        Ok(default.to_string())
+    } else {
+        Ok(value)
     }
 }
 
-/// Authorizing for admin functionality using admin key
-fn auth_admin(nk: &Nitrokey3PIV) -> bool {
-    let mut admin_key = match prompt_current_admin_key(nk) {
-        Ok(value) => value,
-        Err(value) => return value,
-    };
-
-    // If the user uses default admin key we ask to change it
-    if admin_key.eq(&DEFAULT_ADMIN_KEY) {
-        println!("\nWarning! You are using default admin key. This is not secure!");
-        println!("Let's change it for something secure and usable.");
-        admin_key = match set_password_as_admin_key(nk) {
-            Ok(value) => value,
-            Err(value) => return value,
-        };
-    };
-
-    if let Err(e) = nk.auth_admin(&admin_key) {
-        eprintln!("Error authorizing with admin key: {}", e);
-        return false;
+/// Validates PIN format (6-8 characters)
+fn validate_pin(pin: &str) -> Result<(), String> {
+    if pin.len() < 6 || pin.len() > 8 {
+        Err("PIN must be 6-8 characters long.".to_string())
+    } else {
+        Ok(())
     }
-    true
 }
 
-fn prompt_current_admin_key(nk: &Nitrokey3PIV) -> Result<Vec<u8>, bool> {
-    Ok(match rpassword::prompt_password("Enter current admin key (0102030405060708 x 3): ") {
-        Ok(p) => {
-            if p.is_empty() {
-                DEFAULT_ADMIN_KEY.to_vec()
-            } else {
-                match from_hex(&p) {
-                    Ok(key) => {
-                        match key.len() {
-                            16 | 24 | 32 => key,
-                            _ => {
-                                eprintln!("Key size mismatch, should be 16/24/32 bytes long.");
-                                return Err(false);
-                            }
-                        }
-                    }
-                    Err(_) => {
-                        println!("Doesn't look like hex key, trying to use like a password...");
-                        let guid = nk.guid().context("Can't get GUID of the card").unwrap();
-                        let key = wrap_key(p.as_bytes(), None, &guid);
-                        key.to_vec()
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("Error: {}", e);
-            return Err(false);
-        }
-    })
+/// Validates PUK format (6-8 characters)
+fn validate_puk(puk: &str) -> Result<(), String> {
+    if puk.len() < 6 || puk.len() > 8 {
+        Err("PUK must be 6-8 characters long.".to_string())
+    } else {
+        Ok(())
+    }
 }
 
-fn set_password_as_admin_key(nk: &Nitrokey3PIV) -> Result<Vec<u8>, bool> {
-    Ok(loop {
-        let p1 = match rpassword::prompt_password("Enter new password (empty line to cancel): ") {
-            Ok(p1) => p1.trim().to_owned(),
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                return Err(false);
-            }
-        };
-        if !p1.is_empty() {
-            let p2 = match rpassword::prompt_password("Enter password again: ") {
-                Ok(p2) => p2.trim().to_owned(),
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    return Err(false);
-                }
-            };
-            if p1 != p2 {
-                eprintln!("Given passwords are different!");
-                continue;
-            }
-            let guid = nk.guid().context("Can't get GUID of the card").unwrap();
-            let key = wrap_key(p1.as_bytes(), None, &guid);
-            if let Err(e) = nk.set_admin_key(&key) {
-                eprintln!("Error setting admin key: {}", e);
-                return Err(false);
-            }
-            break key.to_vec();
-        } else {
-            return Err(false);
-        };
-    })
+/// Validates password is non-empty
+fn validate_password(password: &str) -> Result<(), String> {
+    if password.trim().is_empty() {
+        Err("Password cannot be empty.".to_string())
+    } else {
+        Ok(())
+    }
+}
+
+/// Changes the user PIN on the device
+fn change_pin(nk: &Nitrokey3PIV, old_pin: &str) -> anyhow::Result<String> {
+    if !confirm("Do you want to change the PIN?")? {
+        println!("PIN change cancelled.");
+        return Ok(old_pin.to_string());
+    }
+
+    let new_pin = prompt_secret_with_confirmation(
+        "Enter new user PIN (6-8 characters): ",
+        "Enter new PIN again: ",
+        validate_pin,
+    )?;
+
+    nk.change_pin(old_pin, &new_pin)
+        .context("Failed to change PIN on device")?;
+
+    println!("PIN changed successfully!");
+    Ok(new_pin)
+}
+
+/// Changes the PUK on the device
+fn change_puk(nk: &Nitrokey3PIV, old_puk: &str) -> anyhow::Result<()> {
+    if !confirm("Do you want to change the PUK?")? {
+        println!("PUK change cancelled.");
+        return Ok(());
+    }
+
+    let new_puk = prompt_secret_with_confirmation(
+        "Enter new PUK (6-8 characters): ",
+        "Enter new PUK again: ",
+        validate_puk,
+    )?;
+
+    nk.change_puk(old_puk, &new_puk)
+        .context("Failed to change PUK on device")?;
+
+    println!("PUK changed successfully!");
+    Ok(())
+}
+
+/// Prompts for the current admin key (supports hex, password, or default)
+fn prompt_current_admin_key(nk: &Nitrokey3PIV) -> anyhow::Result<Vec<u8>> {
+    let input = rpassword::prompt_password("Enter current admin key (default: 0102030405060708 x 3): ")
+        .context("Failed to read admin key")?;
+
+    if input.is_empty() {
+        return Ok(DEFAULT_ADMIN_KEY.to_vec());
+    }
+
+    // Try to parse as hex
+    if let Ok(key) = from_hex(&input) {
+        match key.len() {
+            16 | 24 | 32 => return Ok(key),
+            _ => return Err(anyhow!("Key size mismatch, should be 16/24/32 bytes long.")),
+        }
+    }
+
+    // Not hex, treat as password
+    println!("Treating input as password (not hex)...");
+    let guid = nk.guid().context("Failed to get card GUID")?;
+    let key = wrap_key(input.as_bytes(), None, &guid);
+    Ok(key.to_vec())
+}
+
+/// Sets a new password-based admin key
+fn set_password_as_admin_key(nk: &Nitrokey3PIV) -> anyhow::Result<Vec<u8>> {
+    if !confirm("Do you want to change the admin key?")? {
+        return Err(anyhow!("Admin key change cancelled"));
+    }
+
+    let password = prompt_secret_with_confirmation(
+        "Enter new admin password: ",
+        "Enter password again: ",
+        validate_password,
+    )?;
+
+    let guid = nk.guid().context("Failed to get card GUID")?;
+    let key = wrap_key(password.as_bytes(), None, &guid);
+
+    nk.set_admin_key(&key)
+        .context("Failed to set admin key on device")?;
+
+    Ok(key.to_vec())
+}
+
+/// Authenticates with admin key and prompts to upgrade if using default
+fn auth_admin(nk: &Nitrokey3PIV) -> anyhow::Result<()> {
+    let mut admin_key = prompt_current_admin_key(nk)?;
+
+    // Warn if using default and offer to change
+    if admin_key == DEFAULT_ADMIN_KEY {
+        println!("\nWarning! You are using the default admin key. This is not secure!");
+
+        if let Ok(new_key) = set_password_as_admin_key(nk) {
+            admin_key = new_key;
+        }
+        // If user cancelled (returned Err), continue with default admin key
+    }
+
+    nk.auth_admin(&admin_key)
+        .context("Failed to authenticate with admin key")?;
+
+    Ok(())
 }
 
 fn prompt(label: &str, default: Option<&str>) -> String {
