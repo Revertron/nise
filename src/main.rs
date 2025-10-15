@@ -482,7 +482,7 @@ fn prompt_current_admin_key(nk: &Nitrokey3PIV) -> Result<Vec<u8>, bool> {
                     Err(_) => {
                         println!("Doesn't look like hex key, trying to use like a password...");
                         let guid = nk.guid().context("Can't get GUID of the card").unwrap();
-                        let key = wrap_key(p.as_bytes(), Some(&guid));
+                        let key = wrap_key(p.as_bytes(), None, &guid);
                         key.to_vec()
                     }
                 }
@@ -517,7 +517,7 @@ fn set_password_as_admin_key(nk: &Nitrokey3PIV) -> Result<Vec<u8>, bool> {
                 continue;
             }
             let guid = nk.guid().context("Can't get GUID of the card").unwrap();
-            let key = wrap_key(p1.as_bytes(), Some(&guid));
+            let key = wrap_key(p1.as_bytes(), None, &guid);
             if let Err(e) = nk.set_admin_key(&key) {
                 eprintln!("Error setting admin key: {}", e);
                 return Err(false);
@@ -661,7 +661,7 @@ fn write_uleb128(mut val: u64, out: &mut Vec<u8>) {
 }
 
 /// Main function: encrypt plaintext file `from` -> write `to`, for `ids` recipients.
-pub fn encrypt_file<P1, P2>(from: P1, to: P2, ids: &[NiseKey]) -> Result<(), anyhow::Error> where P1: AsRef<Path>, P2: AsRef<Path> {
+pub fn encrypt_file<P1, P2>(from: P1, to: P2, ids: &[NiseKey]) -> Result<(), Error> where P1: AsRef<Path>, P2: AsRef<Path> {
     let mut rng = OsRng;
     // Generate file key (32 bytes) for AES-256-GCM
     let mut file_key = [0u8; 32];
@@ -715,8 +715,11 @@ pub fn encrypt_file<P1, P2>(from: P1, to: P2, ids: &[NiseKey]) -> Result<(), any
                 // shared.as_bytes() yields x-coordinate big-endian
                 let shared_bytes = shared.raw_secret_bytes().as_slice();
 
+                let mut info = Vec::new();
+                info.extend_from_slice(eph_pk.to_encoded_point(false).as_bytes());
+                info.extend_from_slice(recipient_pub.as_slice());
                 // derive symmetric key
-                let sym = wrap_key(shared_bytes, None);
+                let sym = wrap_key(shared_bytes, None, &info);
 
                 // XChaCha20-Poly1305 encrypt the file_key
                 let xkey = XKey::from_slice(&sym);
@@ -758,7 +761,12 @@ pub fn encrypt_file<P1, P2>(from: P1, to: P2, ids: &[NiseKey]) -> Result<(), any
                 );
 
                 let shared_bytes = shared.raw_secret_bytes().as_slice();
-                let sym = wrap_key(shared_bytes, None);
+
+                let mut info = Vec::new();
+                info.extend_from_slice(eph_pk.to_encoded_point(false).as_bytes());
+                info.extend_from_slice(recipient_pub.as_slice());
+                // derive symmetric key
+                let sym = wrap_key(shared_bytes, None, &info);
 
                 let xkey = XKey::from_slice(&sym);
                 let aead = XChaCha20Poly1305::new(xkey);
@@ -980,8 +988,12 @@ where
                 Err(_) => continue, // if this device isn’t available or wrong key, skip
             };
 
+        let mut info = Vec::new();
+        info.extend_from_slice(rec.eph_pub.as_slice());
+        info.extend_from_slice(rec.recipient_pub.as_slice());
+
         // Derive symmetric key using same KDF
-        let sym_key = wrap_key(&shared_bytes, None);
+        let sym_key = wrap_key(&shared_bytes, None, &info);
         let cipher = XChaCha20Poly1305::new(XKey::from_slice(&sym_key));
 
         if let Ok(unwrapped) = cipher.decrypt(XNonce::from_slice(&rec.wrap_nonce), rec.wrapped.as_ref()) {
