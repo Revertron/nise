@@ -364,6 +364,9 @@ fn change_pin(nk: &Nitrokey3PIV, old_pin: &str) -> String {
     loop {
         let pin1 = match rpassword::prompt_password("Enter new user PIN (6-8 digits, empty line to cancel): ") {
             Ok(p) => {
+                if p.is_empty() {
+                    return old_pin.to_owned();
+                }
                 if p.len() < 6 || p.len() > 8 {
                     println!("PIN should be from 6 to 8 digits, try again.");
                     continue;

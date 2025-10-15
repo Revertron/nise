@@ -1,6 +1,6 @@
 [package]
 name = "nise"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 authors = ["Revertron"]
 description = "NISE - Nitrokey Simple Encryption. Encrypt files by Nitrokey PIV with ease!"
