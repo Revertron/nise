@@ -47,7 +47,7 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
-          apk add --no-cache curl gcc musl-dev openssl-dev pkgconfig rust git pcsc-lite-dev pcsc-lite-static
+          apk add --no-cache bash curl gcc musl-dev openssl-dev pkgconfig rust git pcsc-lite-dev pcsc-lite-static
 
       - name: Checkout code
         uses: actions/checkout@v4
