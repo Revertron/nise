@@ -23,6 +23,9 @@ use std::path::Path;
 // Encryption chunk size (1 MiB)
 const CHUNK_SIZE: usize = 1024 * 1024;
 
+// Include key management help text
+const KEY_MANAGEMENT_HELP: &str = include_str!("../key_management_help.txt");
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let prog = &args[0];
@@ -55,6 +58,7 @@ fn main() {
 
     if matches.opt_present("h") {
         println!("{}", opts.usage(&format!("Usage: {} [options]", prog)));
+        println!("\n{}", KEY_MANAGEMENT_HELP);
         return;
     }
 

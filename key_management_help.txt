@@ -1,0 +1,33 @@
+================================================================================
+                    NITROKEY SECURITY - IMPORTANT INFORMATION
+================================================================================
+
+Your Nitrokey uses THREE credentials to protect your cryptographic keys:
+
+1. PIN (Personal Identification Number)
+   Default: 123456
+   Used for: Decrypting files, signing certificates
+   Format: 6-8 characters
+
+2. PUK (PIN Unlock Key)
+   Default: 12345678
+   Used for: Unlocking PIN after failed attempts
+   Format: 6-8 characters
+
+3. Admin Key (Management Key)
+   Default: 010203040506070801020304050607080102030405060708 (hex)
+   Used for: Generating keys, creating certificates
+   Format: 16/24/32 bytes (hex or password)
+
+⚠️  WARNING: Using default credentials is a CRITICAL SECURITY RISK!
+    Anyone with physical access can compromise your encrypted files.
+
+RECOMMENDED FIRST STEPS:
+  1. Change admin key:  nise --set-admin-key  (DO THIS FIRST!)
+  2. Change PIN:        nise --set-pin
+  3. Change PUK:        nise --set-puk
+  4. Initialize slot:   nise -i -s 85
+
+📖 For detailed setup guide, see: SETUP.md
+
+================================================================================
