@@ -43,7 +43,8 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            container: alpine:3.20
+            container:
+              image: alpine:3.20
             target: x86_64-unknown-linux-musl
             bin_ext: ""
           - os: windows-latest
