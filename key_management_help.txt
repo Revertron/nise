@@ -22,6 +22,24 @@ Your Nitrokey uses THREE credentials to protect your cryptographic keys:
 ⚠️  WARNING: Using default credentials is a CRITICAL SECURITY RISK!
     Anyone with physical access can compromise your encrypted files.
 
+The following table shows what authentication each operation requires:
+
+Operation              | PIN | PUK | MGM | Remarks
+-----------------------|-----|-----|-----|----------------------------------
+Change PIN             |  x  |     |     |
+Change PUK             |     |  x  |     |
+Change MGM (Admin Key) |     |     |  x  |
+Unblock PIN            |     |  x  |     |
+Generate key           |  x  |     |  x  |
+Read certificate       |     |     |     | Does not require authentication
+Write certificate      |  x  |     |  x  |
+
+Legend:
+  PIN = Personal Identification Number
+  PUK = PIN Unlock Key
+  MGM = Management Key (Admin Key)
+  x   = Authentication required
+
 RECOMMENDED FIRST STEPS:
   1. Change admin key:  nise --set-admin-key  (DO THIS FIRST!)
   2. Change PIN:        nise --set-pin

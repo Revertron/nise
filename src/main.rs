@@ -430,6 +430,18 @@ fn validate_password(password: &str) -> Result<(), String> {
     }
 }
 
+/// Validates hex key format (must be 32, 48, or 64 hex characters for 16/24/32 bytes)
+fn validate_hex_key(hex: &str) -> Result<(), String> {
+    let hex = hex.trim();
+    if !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("Key must contain only hexadecimal characters (0-9, a-f, A-F).".to_string());
+    }
+    match hex.len() {
+        32 | 48 | 64 => Ok(()), // 16, 24, or 32 bytes
+        _ => Err("Key must be 32, 48, or 64 hex characters (16, 24, or 32 bytes).".to_string()),
+    }
+}
+
 /// Changes the user PIN on the device
 fn change_pin(nk: &Nitrokey3PIV, old_pin: &str) -> anyhow::Result<String> {
     if !confirm("Do you want to change the PIN?")? {
@@ -494,25 +506,54 @@ fn prompt_current_admin_key(nk: &Nitrokey3PIV) -> anyhow::Result<Vec<u8>> {
     Ok(key.to_vec())
 }
 
-/// Sets a new password-based admin key
+/// Sets a new admin key (password-derived or hex)
 fn set_password_as_admin_key(nk: &Nitrokey3PIV) -> anyhow::Result<Vec<u8>> {
     if !confirm("Do you want to change the admin key?")? {
-        return Err(anyhow!("Admin key change cancelled"));
+        return Err(anyhow!("Admin key change canceled"));
     }
 
-    let password = prompt_secret_with_confirmation(
-        "Enter new admin password: ",
-        "Enter password again: ",
-        validate_password,
-    )?;
+    println!("\nChoose admin key method:");
+    println!("  1) Derive from password (device-specific, may seem like vendor-locked)");
+    println!("  2) Set from hex bytes (portable, generate with: openssl rand -hex 32, or some sha256 hash)");
+    print!("\nEnter choice [1/2]: ");
+    io::stdout().flush()?;
 
-    let guid = nk.guid().context("Failed to get card GUID")?;
-    let key = wrap_key(password.as_bytes(), None, &guid);
+    let mut choice = String::new();
+    io::stdin().read_line(&mut choice)?;
+    let choice = choice.trim();
+
+    let key = match choice {
+        "1" => {
+            // Password-derived key (device-specific via GUID)
+            let password = prompt_secret_with_confirmation(
+                "Enter new admin password: ",
+                "Enter password again: ",
+                validate_password,
+            )?;
+
+            let guid = nk.guid().context("Failed to get card GUID")?;
+            wrap_key(password.as_bytes(), None, &guid).to_vec()
+        }
+        "2" => {
+            // Direct hex key input
+            let hex_key = prompt_secret_with_confirmation(
+                "Enter admin key in hex (32, 48, or 64 characters for AES-128/3DES/AES-256 respectively): ",
+                "Enter hex key again: ",
+                validate_hex_key,
+            )?;
+
+            from_hex(&hex_key.trim())
+                .context("Failed to parse hex key")?
+        }
+        _ => {
+            return Err(anyhow!("Invalid choice. Admin key change canceled."));
+        }
+    };
 
     nk.set_admin_key(&key)
         .context("Failed to set admin key on device")?;
 
-    Ok(key.to_vec())
+    Ok(key)
 }
 
 /// Authenticates with admin key and prompts to upgrade if using default
