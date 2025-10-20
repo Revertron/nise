@@ -441,7 +441,7 @@ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
 name = "nise"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "anyhow",
  "chacha20poly1305",
@@ -456,8 +456,8 @@ dependencies = [
 
 [[package]]
 name = "nitrokey-piv"
-version = "1.2.0"
-source = "git+https://github.com/Revertron/nitrokey-piv?tag=1.2.0#0fb8a5ceb17b781917a387614fccd0c323f1c888"
+version = "1.2.1"
+source = "git+https://github.com/Revertron/nitrokey-piv?tag=1.2.1#df7b5c45e4f887255faa965dd7d5a9405479d0ef"
 dependencies = [
  "aes",
  "anyhow",

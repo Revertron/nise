@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Error};
-use nitrokey_piv::{from_hex, parse_certificate_subject, to_hex, wrap_key, CertificateSubject, EccCurve, Nitrokey3PIV, PivSlot, PublicKey, DEFAULT_ADMIN_KEY};
+use nitrokey_piv::{from_hex, parse_certificate_subject, read_subject_from_certificate, to_hex, wrap_key, CertificateSubject, EccCurve, Nitrokey3PIV, PivSlot, PublicKey, DEFAULT_ADMIN_KEY};
 use std::convert::TryFrom;
 use std::str::FromStr;
 use std::{env, io, process};
@@ -34,6 +34,7 @@ fn main() {
 
     // Define CLI options
     opts.optflag("i", "init", "Init PIV slot with certificate + keypair");
+    opts.optflag("l", "list", "List PIV slots information with public keys");
     opts.optflag("e", "encode", "Encrypt file for given keys");
     opts.optflag("d", "decode", "Decrypt file using Nitrokey");
     opts.optopt("c", "certificate", "Certificate subject line", "CN=Alice, O=My corp, OU=Department, C=US");
@@ -128,6 +129,14 @@ fn main() {
                 process::exit(1);
             }
         };
+        return;
+    }
+
+    // List all slots with keys
+    if matches.opt_present("l") {
+        if let Err(e) = list_slots(None) {
+            eprintln!("Error listing slots and keys: {e}");
+        }
         return;
     }
 
@@ -342,7 +351,70 @@ fn main() {
     eprintln!("No operation specified. Use one of --init, --encode, or --decode.");
     eprintln!("{}", opts.usage(&format!("Usage: {} [options]", prog)));
     process::exit(1);
+}
 
+fn list_slots(serial: Option<u32>) -> anyhow::Result<()> {
+    // Open device
+    let nk = Nitrokey3PIV::open(serial)
+        .context("opening Nitrokey device")?;
+
+    let device_serial = nk.get_serial();
+    println!("Device serial: {:X}\n", device_serial);
+
+    // All PIV slots: authentication (9A), signing (9C), key management (9D), card auth (9E),
+    // and retired key slots (82-95)
+    let mut slots: Vec<u8> = vec![0x9A, 0x9C, 0x9D, 0x9E];
+    slots.extend(0x82..=0x95);
+
+    let mut found_any = false;
+
+    for slot_byte in slots {
+        let slot = match PivSlot::try_from(slot_byte) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+
+        // Try to read certificate from this slot
+        if let Ok(Some(cert_der)) = nk.read_certificate(slot) {
+            found_any = true;
+
+            // Get subject string
+            let subject = read_subject_from_certificate(&cert_der)
+                .unwrap_or_else(|e| format!("(error parsing: {})", e));
+
+            // Get public key (already in uncompressed format)
+            let pub_key_bytes = match nk.read_public_key(slot) {
+                Ok(Some(pk)) => pk,
+                Ok(None) => {
+                    println!("Slot: 0x{:02X}", slot_byte);
+                    println!("Subject: {}", subject);
+                    println!("  (no public key found)\n");
+                    continue;
+                }
+                Err(e) => {
+                    println!("Slot: 0x{:02X}", slot_byte);
+                    println!("Subject: {}", subject);
+                    println!("  (error reading public key: {})\n", e);
+                    continue;
+                }
+            };
+
+            // Format NISE key
+            let pub_hex = to_hex(&pub_key_bytes);
+            let nise_key = format!("nise1:{:X}:{:X}:{}", device_serial, slot_byte, pub_hex);
+
+            // Print formatted output
+            println!("Slot: 0x{:02X}", slot_byte);
+            println!("Subject: {}", subject);
+            println!("  {}\n", nise_key);
+        }
+    }
+
+    if !found_any {
+        println!("No certificates found in any slot.");
+    }
+
+    Ok(())
 }
 
 // ============================================================================
