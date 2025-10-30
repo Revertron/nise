@@ -33,7 +33,7 @@ fn main() {
     let mut opts = Options::new();
 
     // Define CLI options
-    opts.optflag("i", "init", "Init PIV slot with certificate + keypair");
+    opts.optflag("i", "init", "Init PIV slot with certificate and keypair");
     opts.optflag("l", "list", "List PIV slots information with public keys");
     opts.optflag("e", "encode", "Encrypt file for given keys");
     opts.optflag("d", "decode", "Decrypt file using Nitrokey");

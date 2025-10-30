@@ -47,6 +47,9 @@ You can install it system-wide using:
 cargo install --path .
 ```
 
+Or, if you want to build portable Linux binary, and you have docker installed, you can run `./linux-build.sh`.
+It will prepare an Alpine Linux container and build alum binary using `musl` instead of `glibc`.
+
 ---
 
 ## Nitrokey Setup and usage
